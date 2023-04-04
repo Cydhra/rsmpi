@@ -28,7 +28,7 @@ use crate::datatype::traits::*;
 use crate::datatype::{DatatypeRef, DynBuffer, DynBufferMut};
 use crate::raw::traits::*;
 use crate::request::{Request, Scope, StaticScope};
-use crate::topology::{traits::*, CommunicatorHandle, InterCommunicator};
+use crate::topology::{sealed::CommunicatorHandle, traits::*, InterCommunicator};
 use crate::topology::{Process, Rank};
 use crate::with_uninitialized;
 
@@ -665,7 +665,7 @@ pub trait CommunicatorCollectives: Communicator {
     }
 }
 
-impl<C: Communicator> CommunicatorCollectives for C {}
+impl<C: Communicator + ?Sized> CommunicatorCollectives for C {}
 
 /// Something that can take the role of 'root' in a collective operation.
 ///
@@ -1686,7 +1686,7 @@ pub trait Root: AsCommunicator {
     }
 }
 
-impl<'a, C: 'a + Communicator> Root for Process<'a, C> {
+impl<'a> Root for Process<'a> {
     fn root_rank(&self) -> Rank {
         self.rank()
     }

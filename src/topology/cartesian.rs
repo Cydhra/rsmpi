@@ -4,6 +4,7 @@ use conv::ConvUtil;
 
 use super::{AsCommunicator, Communicator, IntoTopology, Rank};
 use crate::ffi::MPI_Comm;
+use crate::topology::sealed::{AsHandle, CommunicatorHandle};
 use crate::topology::SimpleCommunicator;
 use crate::{
     datatype::traits::*, ffi, raw::traits::*, with_uninitialized, with_uninitialized2, Count,
@@ -435,6 +436,12 @@ impl CartesianCommunicator {
             in the CartesianCommunicator");
 
         unsafe { self.subgroup_unchecked(retain) }
+    }
+}
+
+impl AsHandle for CartesianCommunicator {
+    fn get_handle(&self) -> &CommunicatorHandle {
+        self.0.get_handle()
     }
 }
 

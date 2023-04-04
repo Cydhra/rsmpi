@@ -474,10 +474,7 @@ where
     }
 }
 
-unsafe impl<'a, C> Source for Process<'a, C>
-where
-    C: 'a + Communicator,
-{
+unsafe impl<'a> Source for Process<'a> {
     fn source_rank(&self) -> Rank {
         self.rank()
     }
@@ -893,10 +890,7 @@ pub trait Destination: AsCommunicator {
     }
 }
 
-impl<'a, C> Destination for Process<'a, C>
-where
-    C: 'a + Communicator,
-{
+impl<'a> Destination for Process<'a> {
     fn destination_rank(&self) -> Rank {
         self.rank()
     }

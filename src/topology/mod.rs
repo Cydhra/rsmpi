@@ -34,6 +34,7 @@ use crate::datatype::traits::*;
 use crate::ffi;
 use crate::ffi::{MPI_Comm, MPI_Group};
 use crate::raw::traits::*;
+use crate::topology::sealed::{AsHandle, CommunicatorHandle};
 use crate::with_uninitialized;
 
 mod cartesian;
@@ -57,46 +58,59 @@ pub trait AsCommunicator {
 /// Identifies a certain process within a communicator.
 pub type Rank = c_int;
 
-/// A raw communicator handle.
-pub(crate) enum CommunicatorHandle {
-    /// Built-in communicator `MPI_COMM_SELF`, containing only the current process. Exists until
-    /// `MPI_Finalize` is called.
-    ///
-    /// # Standard section(s)
-    ///
-    /// 6.2
-    SelfComm,
+/// This module seals away public types that are only used internally. They need to be
+/// public because they are required to be implemented by all Communicator types (a public trait
+/// itself=, but they should not be used by downstream crates.
+pub(crate) mod sealed {
+    use crate::traits::AsRaw;
+    use mpi_sys::MPI_Comm;
 
-    /// Built-in communicator `MPI_COMM_WORLD`, containing all processes. Exists until
-    /// `MPI_Finalize` is called.
-    ///
-    /// # Standard section(s)
-    ///
-    /// 6.2
-    World,
+    /// Get the handle of a communicator.
+    pub trait AsHandle: AsRaw<Raw = MPI_Comm> {
+        fn get_handle(&self) -> &CommunicatorHandle;
+    }
 
-    /// A user-defined communicator. Created through grouping operations such as `MPI_Comm_split`,
-    /// must be freed when dropped.
-    ///
-    /// # Standard section(s)
-    ///
-    /// 6.4
-    User(MPI_Comm),
+    /// A raw communicator handle.
+    pub enum CommunicatorHandle {
+        /// Built-in communicator `MPI_COMM_SELF`, containing only the current process. Exists until
+        /// `MPI_Finalize` is called.
+        ///
+        /// # Standard section(s)
+        ///
+        /// 6.2
+        SelfComm,
 
-    /// An inter-communicator returned by `MPI_Comm_get_parent`. Needs no drop semantics, because it
-    /// was created in `MPI_Init`.
-    ///
-    /// # Standard section(s)
-    ///
-    /// 10.3
-    Parent(MPI_Comm),
+        /// Built-in communicator `MPI_COMM_WORLD`, containing all processes. Exists until
+        /// `MPI_Finalize` is called.
+        ///
+        /// # Standard section(s)
+        ///
+        /// 6.2
+        World,
 
-    /// A user-created inter-communicator that can needs to be disconnected when dropped.
-    ///
-    /// # Standard section(s)
-    ///
-    /// 6.6
-    InterComm(MPI_Comm),
+        /// A user-defined communicator. Created through grouping operations such as `MPI_Comm_split`,
+        /// must be freed when dropped.
+        ///
+        /// # Standard section(s)
+        ///
+        /// 6.4
+        User(MPI_Comm),
+
+        /// An inter-communicator returned by `MPI_Comm_get_parent`. Needs no drop semantics, because it
+        /// was created in `MPI_Init`.
+        ///
+        /// # Standard section(s)
+        ///
+        /// 10.3
+        Parent(MPI_Comm),
+
+        /// A user-created inter-communicator that can needs to be disconnected when dropped.
+        ///
+        /// # Standard section(s)
+        ///
+        /// 6.6
+        InterComm(MPI_Comm),
+    }
 }
 
 impl CommunicatorHandle {
@@ -223,6 +237,30 @@ unsafe impl AsRaw for CommunicatorHandle {
     }
 }
 
+/// A communicator that only holds a reference to a communicator handle.
+#[derive(Clone)]
+pub struct ReferencedCommunicator<'a>(pub(crate) &'a CommunicatorHandle);
+
+unsafe impl<'a> AsRaw for ReferencedCommunicator<'a> {
+    type Raw = MPI_Comm;
+
+    fn as_raw(&self) -> Self::Raw {
+        self.0.as_raw()
+    }
+}
+
+impl<'a> AsHandle for ReferencedCommunicator<'a> {
+    fn get_handle(&self) -> &CommunicatorHandle {
+        self.0
+    }
+}
+
+impl<'a> Communicator for ReferencedCommunicator<'a> {
+    fn target_size(&self) -> Rank {
+        self.size()
+    }
+}
+
 /// A simple communicator, either a system-defined communicator like `MPI_COMM_WORLD` or a
 /// user-defined intra-communicator without a special topology.
 pub struct SimpleCommunicator(pub(crate) CommunicatorHandle);
@@ -310,6 +348,12 @@ impl FromRaw for SimpleCommunicator {
         debug_assert_ne!(handle, ffi::RSMPI_COMM_NULL);
         let handle = CommunicatorHandle::simple_from_raw_unchecked(handle);
         SimpleCommunicator(handle)
+    }
+}
+
+impl AsHandle for SimpleCommunicator {
+    fn get_handle(&self) -> &CommunicatorHandle {
+        &self.0
     }
 }
 
@@ -453,6 +497,12 @@ impl FromRaw for InterCommunicator {
     }
 }
 
+impl AsHandle for InterCommunicator {
+    fn get_handle(&self) -> &CommunicatorHandle {
+        &self.0
+    }
+}
+
 impl Communicator for InterCommunicator {
     fn target_size(&self) -> Rank {
         self.remote_size()
@@ -497,7 +547,7 @@ impl Color {
 pub type Key = c_int;
 
 /// Communicators are contexts for communication
-pub trait Communicator: AsRaw<Raw = MPI_Comm> {
+pub trait Communicator: AsHandle {
     /// Returns the number of processes available to communicate with in this `Communicator`. For
     /// intra-communicators, this is equivalent to [`size`](#method.size). For inter-communicators,
     /// this is equivalent to [`remote_size`](struct.InterCommunicator.html#method.remote_size).
@@ -555,10 +605,7 @@ pub trait Communicator: AsRaw<Raw = MPI_Comm> {
     ///
     /// # Examples
     /// See `examples/broadcast.rs` `examples/gather.rs` `examples/send_receive.rs`
-    fn process_at_rank(&self, r: Rank) -> Process<Self>
-    where
-        Self: Sized,
-    {
+    fn process_at_rank(&self, r: Rank) -> Process {
         assert!(0 <= r && r < self.target_size());
         Process::by_rank_unchecked(self, r)
     }
@@ -573,10 +620,7 @@ pub trait Communicator: AsRaw<Raw = MPI_Comm> {
     }
 
     /// A `Process` for the calling process
-    fn this_process(&self) -> Process<Self>
-    where
-        Self: Sized,
-    {
+    fn this_process(&self) -> Process {
         let rank = self.rank();
         Process::by_rank_unchecked(self, rank)
     }
@@ -1080,30 +1124,30 @@ impl MergeOrder {
 }
 
 /// Identifies a process by its `Rank` within a certain communicator.
-#[derive(Copy, Clone)]
-pub struct Process<'a, C>
-where
-    C: 'a + Communicator,
-{
-    comm: &'a C,
+#[derive(Clone)]
+pub struct Process<'a> {
+    comm: ReferencedCommunicator<'a>,
     rank: Rank,
 }
 
-impl<'a, C> Process<'a, C>
-where
-    C: 'a + Communicator,
-{
+impl<'a> Process<'a> {
     #[allow(dead_code)]
-    fn by_rank(c: &'a C, r: Rank) -> Option<Self> {
+    fn by_rank(c: &'a (impl Communicator + ?Sized), r: Rank) -> Option<Self> {
         if r != unsafe { ffi::RSMPI_PROC_NULL } {
-            Some(Process { comm: c, rank: r })
+            Some(Process {
+                comm: ReferencedCommunicator(c.get_handle()),
+                rank: r,
+            })
         } else {
             None
         }
     }
 
-    fn by_rank_unchecked(c: &'a C, r: Rank) -> Self {
-        Process { comm: c, rank: r }
+    fn by_rank_unchecked(c: &'a (impl Communicator + ?Sized), r: Rank) -> Self {
+        Process {
+            comm: ReferencedCommunicator(c.get_handle()),
+            rank: r,
+        }
     }
 
     /// The process rank
@@ -1112,13 +1156,10 @@ where
     }
 }
 
-impl<'a, C> AsCommunicator for Process<'a, C>
-where
-    C: 'a + Communicator,
-{
-    type Out = C;
+impl<'a> AsCommunicator for Process<'a> {
+    type Out = ReferencedCommunicator<'a>;
     fn as_communicator(&self) -> &Self::Out {
-        self.comm
+        &self.comm
     }
 }
 
