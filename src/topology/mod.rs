@@ -740,11 +740,7 @@ pub trait Communicator: AsHandle {
     ///
     /// 6.4.2
     #[cfg(not(msmpi))]
-    fn split_by_subgroup<G: ?Sized>(&self, group: &G) -> Option<SimpleCommunicator>
-    where
-        G: Group,
-        Self: Sized,
-    {
+    fn split_by_subgroup(&self, group: &dyn Group) -> Option<SimpleCommunicator> {
         self.split_by_subgroup_with_tag(group, Tag::default())
     }
 
@@ -757,15 +753,11 @@ pub trait Communicator: AsHandle {
     ///
     /// 6.4.2
     #[cfg(not(msmpi))]
-    fn split_by_subgroup_with_tag<G: ?Sized>(
+    fn split_by_subgroup_with_tag(
         &self,
-        group: &G,
+        group: &dyn Group,
         tag: Tag,
-    ) -> Option<SimpleCommunicator>
-    where
-        G: Group,
-        Self: Sized,
-    {
+    ) -> Option<SimpleCommunicator> {
         unsafe {
             SimpleCommunicator::from_raw_checked(
                 with_uninitialized(|newcomm| {
@@ -1393,8 +1385,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.1
-    fn compare(&self, other: &dyn Group) -> GroupRelation
-    {
+    fn compare(&self, other: &dyn Group) -> GroupRelation {
         unsafe {
             with_uninitialized(|relation| {
                 ffi::MPI_Group_compare(self.as_raw(), other.as_raw(), relation)
