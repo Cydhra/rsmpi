@@ -588,11 +588,8 @@ pub trait Communicator: AsHandle {
 
     /// Returns an `AnyProcess` identifier that can be used, e.g. as a `Source` in point to point
     /// communication.
-    fn any_process(&self) -> AnyProcess<Self>
-    where
-        Self: Sized,
-    {
-        AnyProcess(self)
+    fn any_process(&self) -> AnyProcess {
+        AnyProcess(self.get_handle())
     }
 
     /// A `Process` for the calling process
@@ -1149,17 +1146,33 @@ impl<'a> AsCommunicator for Process<'a> {
 
 /// Identifies an arbitrary process that is a member of a certain communicator, e.g. for use as a
 /// `Source` in point to point communication.
-pub struct AnyProcess<'a, C>(&'a C)
-where
-    C: 'a + Communicator;
+pub struct AnyProcess<'a>(&'a CommunicatorHandle);
 
-impl<'a, C> AsCommunicator for AnyProcess<'a, C>
-where
-    C: 'a + Communicator,
+impl<'a> AsCommunicator for AnyProcess<'a>
 {
-    type Out = C;
+    type Out = AnyProcess<'a>;
     fn as_communicator(&self) -> &Self::Out {
+        self
+    }
+}
+
+impl<'a> AsHandle for AnyProcess<'a> {
+    fn get_handle(&self) -> &CommunicatorHandle {
         self.0
+    }
+}
+
+unsafe impl<'a> AsRaw for AnyProcess<'a> {
+    type Raw = MPI_Comm;
+
+    fn as_raw(&self) -> Self::Raw {
+        self.0.as_raw()
+    }
+}
+
+impl<'a> Communicator for AnyProcess<'a> {
+    fn target_size(&self) -> Rank {
+        self.size()
     }
 }
 

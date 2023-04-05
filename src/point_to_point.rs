@@ -465,9 +465,7 @@ pub unsafe trait Source: AsCommunicator {
     }
 }
 
-unsafe impl<'a, C> Source for AnyProcess<'a, C>
-where
-    C: 'a + Communicator,
+unsafe impl<'a> Source for AnyProcess<'a>
 {
     fn source_rank(&self) -> Rank {
         unsafe { ffi::RSMPI_ANY_SOURCE }
