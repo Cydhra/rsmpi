@@ -605,10 +605,7 @@ pub trait Communicator: AsHandle {
     /// # Standard section(s)
     ///
     /// 6.4.1
-    fn compare<C: ?Sized>(&self, other: &C) -> CommunicatorRelation
-    where
-        C: Communicator,
-        Self: Sized,
+    fn compare(&self, other: &dyn Communicator) -> CommunicatorRelation
     {
         unsafe {
             with_uninitialized(|cmp| ffi::MPI_Comm_compare(self.as_raw(), other.as_raw(), cmp))
@@ -1235,10 +1232,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.2
-    fn union<G>(&self, other: &G) -> UserGroup
-    where
-        G: Group,
-        Self: Sized,
+    fn union(&self, other: &dyn Group) -> UserGroup
     {
         unsafe {
             UserGroup(
@@ -1258,10 +1252,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.2
-    fn intersection<G>(&self, other: &G) -> UserGroup
-    where
-        G: Group,
-        Self: Sized,
+    fn intersection(&self, other: &dyn Group) -> UserGroup
     {
         unsafe {
             UserGroup(
@@ -1281,10 +1272,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.2
-    fn difference<G>(&self, other: &G) -> UserGroup
-    where
-        G: Group,
-        Self: Sized,
+    fn difference(&self, other: &dyn Group) -> UserGroup
     {
         unsafe {
             UserGroup(
