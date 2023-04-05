@@ -717,11 +717,7 @@ pub trait Communicator: AsHandle {
     /// # Standard section(s)
     ///
     /// 6.4.2
-    fn split_by_subgroup_collective<G: ?Sized>(&self, group: &G) -> Option<SimpleCommunicator>
-    where
-        G: Group,
-        Self: Sized,
-    {
+    fn split_by_subgroup_collective(&self, group: &dyn Group) -> Option<SimpleCommunicator> {
         unsafe {
             SimpleCommunicator::from_raw_checked(
                 with_uninitialized(|newcomm| {
@@ -1365,11 +1361,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.1
-    fn translate_rank<G>(&self, rank: Rank, other: &G) -> Option<Rank>
-    where
-        G: Group,
-        Self: Sized,
-    {
+    fn translate_rank(&self, rank: Rank, other: &dyn Group) -> Option<Rank> {
         unsafe {
             let (_, translated) = with_uninitialized(|translated| {
                 ffi::MPI_Group_translate_ranks(self.as_raw(), 1, &rank, other.as_raw(), translated)
@@ -1389,11 +1381,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.1
-    fn translate_ranks<G>(&self, ranks: &[Rank], other: &G) -> Vec<Option<Rank>>
-    where
-        G: Group,
-        Self: Sized,
-    {
+    fn translate_ranks(&self, ranks: &[Rank], other: &dyn Group) -> Vec<Option<Rank>> {
         ranks
             .iter()
             .map(|&r| self.translate_rank(r, other))
@@ -1405,10 +1393,7 @@ pub trait Group: AsRaw<Raw = MPI_Group> {
     /// # Standard section(s)
     ///
     /// 6.3.1
-    fn compare<G>(&self, other: &G) -> GroupRelation
-    where
-        G: Group,
-        Self: Sized,
+    fn compare(&self, other: &dyn Group) -> GroupRelation
     {
         unsafe {
             with_uninitialized(|relation| {
