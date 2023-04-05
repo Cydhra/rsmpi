@@ -237,30 +237,6 @@ unsafe impl AsRaw for CommunicatorHandle {
     }
 }
 
-/// A communicator that only holds a reference to a communicator handle.
-#[derive(Clone)]
-pub struct ReferencedCommunicator<'a>(pub(crate) &'a CommunicatorHandle);
-
-unsafe impl<'a> AsRaw for ReferencedCommunicator<'a> {
-    type Raw = MPI_Comm;
-
-    fn as_raw(&self) -> Self::Raw {
-        self.0.as_raw()
-    }
-}
-
-impl<'a> AsHandle for ReferencedCommunicator<'a> {
-    fn get_handle(&self) -> &CommunicatorHandle {
-        self.0
-    }
-}
-
-impl<'a> Communicator for ReferencedCommunicator<'a> {
-    fn target_size(&self) -> Rank {
-        self.size()
-    }
-}
-
 /// A simple communicator, either a system-defined communicator like `MPI_COMM_WORLD` or a
 /// user-defined intra-communicator without a special topology.
 pub struct SimpleCommunicator(pub(crate) CommunicatorHandle);
@@ -1126,7 +1102,7 @@ impl MergeOrder {
 /// Identifies a process by its `Rank` within a certain communicator.
 #[derive(Clone)]
 pub struct Process<'a> {
-    comm: ReferencedCommunicator<'a>,
+    comm: &'a CommunicatorHandle,
     rank: Rank,
 }
 
@@ -1135,7 +1111,7 @@ impl<'a> Process<'a> {
     fn by_rank(c: &'a (impl Communicator + ?Sized), r: Rank) -> Option<Self> {
         if r != unsafe { ffi::RSMPI_PROC_NULL } {
             Some(Process {
-                comm: ReferencedCommunicator(c.get_handle()),
+                comm: c.get_handle(),
                 rank: r,
             })
         } else {
@@ -1145,7 +1121,7 @@ impl<'a> Process<'a> {
 
     fn by_rank_unchecked(c: &'a (impl Communicator + ?Sized), r: Rank) -> Self {
         Process {
-            comm: ReferencedCommunicator(c.get_handle()),
+            comm: c.get_handle(),
             rank: r,
         }
     }
@@ -1156,10 +1132,30 @@ impl<'a> Process<'a> {
     }
 }
 
+impl<'a> AsHandle for Process<'a> {
+    fn get_handle(&self) -> &'a CommunicatorHandle {
+        return self.comm;
+    }
+}
+
+unsafe impl<'a> AsRaw for Process<'a> {
+    type Raw = MPI_Comm;
+
+    fn as_raw(&self) -> Self::Raw {
+        return self.comm.as_raw();
+    }
+}
+
+impl<'a> Communicator for Process<'a> {
+    fn target_size(&self) -> Rank {
+        self.size()
+    }
+}
+
 impl<'a> AsCommunicator for Process<'a> {
-    type Out = ReferencedCommunicator<'a>;
+    type Out = Process<'a>;
     fn as_communicator(&self) -> &Self::Out {
-        &self.comm
+        self
     }
 }
 
